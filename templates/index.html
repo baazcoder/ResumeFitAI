@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ResumeFit-AI</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="theme-toggle">
+        <button id="themeToggle" onclick="toggleTheme()">🌙 Dark Mode</button>
+    </div>
+
+    <div class="container">
+        <header>
+            <h1>📄 ResumeFit-AI</h1>
+            <p>AI-Powered Resume Analysis & Optimization</p>
+        </header>
+
+        {% if error %}
+        <div class="error-card">
+            <h3>❌ Error</h3>
+            <p>{{ error }}</p>
+        </div>
+        {% endif %}
+
+        <div class="card">
+            <form action="/process" method="post" enctype="multipart/form-data" id="atsForm">
+                <div class="form-group">
+                    <label for="resume">Upload Resume (TXT, PDF, DOCX)</label>
+                    <input type="file" id="resume" name="resume" accept=".txt,.pdf,.docx" required>
+                    <small>Supported formats: TXT, PDF, DOCX | Max size: 5MB</small>
+                </div>
+
+                <div class="form-group">
+                    <label for="job_desc">Job Description</label>
+                    <textarea 
+                        id="job_desc" 
+                        name="job_desc" 
+                        rows="8" 
+                        placeholder="Paste the complete job description here..."
+                        required
+                    >{{ job_desc if job_desc else '' }}</textarea>
+                </div>
+
+                <button type="submit" class="btn-primary">
+                    <span class="btn-text">🚀 Analyze Resume</span>
+                    <span class="btn-loading" style="display: none;">Analyzing...</span>
+                </button>
+            </form>
+        </div>
+
+        {% if similarity is defined %}
+        <div class="results-container">
+            <!-- Overall Score -->
+            <div class="results-card">
+                <h2>📊 Overall Match Score</h2>
+                
+                <div class="similarity-score">
+                    <div class="score-circle {{ 'high' if similarity >= 70 else 'medium' if similarity >= 50 else 'low' }}">
+                        <span class="score-number">{{ similarity }}%</span>
+                        <span class="score-label">Match</span>
+                    </div>
+                    <div class="score-description">
+                        {% if similarity >= 70 %}
+                        <p class="status-high">✓ Excellent match! Your resume aligns well with the job description.</p>
+                        {% elif similarity >= 50 %}
+                        <p class="status-medium">⚠ Good match, but there's room for improvement.</p>
+                        {% else %}
+                        <p class="status-low">⚠ Low match. Consider tailoring your resume more closely.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="action-buttons">
+                    <button onclick="exportResults()" class="btn-secondary">📥 Export Results</button>
+                    <button onclick="window.print()" class="btn-secondary">🖨️ Print</button>
+                </div>
+            </div>
+
+            <!-- Section Breakdown -->
+            {% if section_scores %}
+            <div class="results-card">
+                <h2>📈 Section Analysis</h2>
+                <div class="section-chart">
+                    <canvas id="sectionChart"></canvas>
+                </div>
+                <div class="section-scores">
+                    {% for section, score in section_scores.items() %}
+                    <div class="section-item">
+                        <span class="section-name">{{ section.title() }}</span>
+                        <div class="progress-bar">
+                            <div class="progress-fill {{ 'high' if score >= 70 else 'medium' if score >= 50 else 'low' }}" 
+                                 style="width: {{ score }}%"></div>
+                        </div>
+                        <span class="section-score">{{ score }}%</span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Keywords Analysis -->
+            <div class="results-card">
+                <h2>🔍 Keyword Analysis</h2>
+                
+                <div class="keywords-grid">
+                    <div class="keyword-section">
+                        <h3>✅ Matching Keywords</h3>
+                        <div class="keyword-tags">
+                            {% if matching_keywords %}
+                                {% for keyword in matching_keywords %}
+                                <span class="keyword-tag match">{{ keyword }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <p class="no-data">No matching keywords found</p>
+                            {% endif %}
+                        </div>
+                    </div>
+
+                    <div class="keyword-section">
+                        <h3>⚠️ Missing Keywords</h3>
+                        <div class="keyword-tags">
+                            {% if missing_keywords %}
+                                {% for keyword in missing_keywords %}
+                                <span class="keyword-tag missing">{{ keyword }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <p class="no-data">No missing keywords!</p>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="keyword-comparison">
+                    <div class="comparison-column">
+                        <h4>Resume Top Keywords</h4>
+                        <ul>
+                            {% for kw, count in resume_keywords %}
+                            <li><strong>{{ kw }}</strong> ({{ count }})</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    <div class="comparison-column">
+                        <h4>Job Description Top Keywords</h4>
+                        <ul>
+                            {% for kw, count in job_keywords %}
+                            <li><strong>{{ kw }}</strong> ({{ count }})</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- AI Suggestions -->
+            {% if ai_suggestions %}
+            <div class="results-card ai-card">
+                <h2>🤖 AI-Powered Improvement Suggestions</h2>
+                <div class="ai-suggestions">
+                    <pre>{{ ai_suggestions }}</pre>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Side-by-Side Comparison -->
+            <div class="results-card">
+                <h2>📑 Side-by-Side Comparison</h2>
+                <div class="comparison-view">
+                    <div class="comparison-pane">
+                        <h3>Your Resume</h3>
+                        <div class="text-content">{{ resume_text[:1000] }}{% if resume_text|length > 1000 %}...{% endif %}</div>
+                    </div>
+                    <div class="comparison-pane">
+                        <h3>Job Description</h3>
+                        <div class="text-content">{{ job_desc[:1000] }}{% if job_desc|length > 1000 %}...{% endif %}</div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+        {% endif %}
+
+        <!-- History Section -->
+        {% if history %}
+        <div class="results-card history-card">
+            <div class="history-header">
+                <h2>📚 Analysis History</h2>
+                <button onclick="clearHistory()" class="btn-danger-small">Clear History</button>
+            </div>
+            <div class="history-list">
+                {% for entry in history[-10:]|reverse %}
+                <div class="history-item">
+                    <div class="history-info">
+                        <strong>{{ entry.filename }}</strong>
+                        <span class="history-date">{{ entry.timestamp[:10] }}</span>
+                    </div>
+                    <div class="history-score {{ 'high' if entry.similarity >= 70 else 'medium' if entry.similarity >= 50 else 'low' }}">
+                        {{ entry.similarity }}%
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <script src="/static/script.js"></script>
+    {% if section_scores %}
+    <script>
+        window.sectionScoresData = {
+            labels: {{ section_scores.keys()|list|tojson }},
+            values: {{ section_scores.values()|list|tojson }}
+        };
+    </script>
+    {% endif %}
+</body>
+</html>
